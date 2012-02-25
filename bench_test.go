@@ -7,7 +7,9 @@ import (
 
 func BenchmarkPatternMatching(b *testing.B) {
 	p := New()
-	p.Get("/hello/:name", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request){}))
+	p.Get("/hello/:name", Handler(func(p Params) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request){})
+	}))
 	for n := 0; n < b.N; n++ {
 		b.StopTimer()
 		r, err := http.NewRequest("GET", "/hello/blake", nil)
