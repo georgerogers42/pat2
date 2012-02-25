@@ -3,8 +3,10 @@ package pat
 
 import (
 	"net/http"
-	"net/url"
 )
+
+type Handler func (params Params) http.Handler
+type Params map[string]string
 
 type PatternServeMux struct {
 	handlers map[string][]*patHandler
@@ -19,10 +21,8 @@ func New() *PatternServeMux {
 func (p *PatternServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, ph := range p.handlers[r.Method] {
 		if params, ok := ph.try(r.URL.Path); ok {
-			if len(params) > 0 {
-				r.URL.RawQuery = url.Values(params).Encode() + "&" + r.URL.RawQuery
-			}
-			ph.ServeHTTP(w, r)
+			px := ph.handler(params)
+			px.ServeHTTP(w, r)
 			return
 		}
 	}
@@ -31,43 +31,43 @@ func (p *PatternServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // Adds the pattern handler pair for a Get.
-func (p *PatternServeMux) Get(pat string, h http.Handler) {
+func (p *PatternServeMux) Get(pat string, h Handler) {
 	p.Add("GET", pat, h)
 }
 
 // Adds the pattern handler pair for a Post.
-func (p *PatternServeMux) Post(pat string, h http.Handler) {
+func (p *PatternServeMux) Post(pat string, h Handler) {
 	p.Add("POST", pat, h)
 }
 
 // Adds the pattern handler pair for a Put.
-func (p *PatternServeMux) Put(pat string, h http.Handler) {
+func (p *PatternServeMux) Put(pat string, h Handler) {
 	p.Add("PUT", pat, h)
 }
 
 // Adds the pattern handler pair for a Delete.
-func (p *PatternServeMux) Del(pat string, h http.Handler) {
+func (p *PatternServeMux) Del(pat string, h Handler) {
 	p.Add("DELETE", pat, h)
 }
 
 // Adds the pattern handler pair for a HTTP Method meth.
-func (p *PatternServeMux) Add(meth, pat string, h http.Handler) {
+func (p *PatternServeMux) Add(meth, pat string, h Handler) {
 	p.handlers[meth] = append(p.handlers[meth], &patHandler{pat, h})
 }
 
 type patHandler struct {
 	pat string
-	http.Handler
+	handler Handler
 }
 
-func (ph *patHandler) try(path string) (url.Values, bool) {
-	p := make(url.Values)
+func (ph *patHandler) try(path string) (Params, bool) {
+	p := make(Params)
 	var i, j int
 	for i < len(path) {
 		switch {
 		case j == len(ph.pat) && ph.pat[j-1] == '/':
 			// Should i put a special form variable splat for this case
-			p.Add(":splat", path[i:])
+			p[":splat"] = path[i:]
 			return p, true
 		case j >= len(ph.pat):
 			return nil, false
@@ -75,7 +75,7 @@ func (ph *patHandler) try(path string) (url.Values, bool) {
 			var name, val string
 			name, j = find(ph.pat, '/', j)
 			val, i = find(path, '/', i)
-			p.Add(name, val)
+			p[name] = val
 		case path[i] == ph.pat[j]:
 			i++
 			j++
